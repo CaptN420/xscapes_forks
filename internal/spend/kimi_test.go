@@ -1,6 +1,7 @@
 package spend
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -67,9 +68,26 @@ func TestKimiSessionDirComesFromTheIndexLastEntryWins(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	idx := `{"sessionId":"session_a","sessionDir":"` + old + `","workDir":"/x"}` + "\n" +
-		`{"sessionId":"session_b","sessionDir":"/nowhere","workDir":"/y"}` + "\n" +
-		`{"sessionId":"session_a","sessionDir":"` + cur + `","workDir":"/y"}` + "\n"
+	// The index is JSON, and on Windows a path inside it is full of
+	// backslashes: hand-concatenating writes "...\Users\...", where \U is not a
+	// legal escape and the line will not parse -- which is exactly how this test
+	// failed on Windows while passing everywhere else. Marshal it.
+	idx := ""
+	for _, rec := range []struct {
+		SessionID  string `json:"sessionId"`
+		SessionDir string `json:"sessionDir"`
+		WorkDir    string `json:"workDir"`
+	}{
+		{"session_a", old, "/x"},
+		{"session_b", "/nowhere", "/y"},
+		{"session_a", cur, "/y"},
+	} {
+		line, err := json.Marshal(rec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		idx += string(line) + "\n"
+	}
 	if err := os.WriteFile(filepath.Join(home, "session_index.jsonl"), []byte(idx), 0o644); err != nil {
 		t.Fatal(err)
 	}

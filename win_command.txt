@@ -1,0 +1,80 @@
+# xscapes Companion Command — Windows Reference
+
+## Overview
+
+The `companion` is the animated animal drawn in the landscape. It is global (not per-repo) and stored in a single file under your home directory.
+
+## Storage Location
+
+| Platform | Path |
+|----------|------|
+| Windows | `%USERPROFILE%\.config\xscapes\companion` |
+| Unix-like | `$HOME/.config/xscapes/companion` |
+
+The file contains one line: the companion name (lowercase). A running scape reads it every `companionPoll` interval (~12 fps) and switches without restart.
+
+## CLI Usage
+
+```bash
+# Show current companion
+xscapes companion
+
+# Set companion
+xscapes companion cat
+xscapes companion crab
+```
+
+Valid names (from `companion.Names()`):
+- `cat`
+- `crab`
+- *(add more as they are implemented)*
+
+## Environment Override
+
+Two env var spellings are recognised (the doubled one is legacy, kept for backwards compatibility):
+
+| Variable | Status |
+|----------|--------|
+| `COMPANION` | **Correct** — use this |
+| `XSCAPES_COMPANION` | Legacy — still works but deprecated |
+| `XSCAPES_XSCAPES_COMPANION` | The old broken spelling — documented in README since a rename bug, never worked until fixed 2026-09-11 |
+
+When both are set, the correct name wins. The env var takes priority over the file.
+
+## How It Works (Code Flow)
+
+```
+companionPref()
+  ├─ companionEnv()        → reads COMPANION / XSCAPES_COMPANION
+  └─ os.ReadFile(companionPath())  → reads ~/.config/xscapes/companion
+       ↓
+  companionName(v)          → lowercases, validates against Names()
+       ↓
+  setCompanionPref(name)    → writes name + "\n" to file
+```
+
+## Live Switching
+
+A running scape polls the file every `companionPoll` (defined in `companion_live_test.go`). The switch is not instant — it waits for the next poll cycle. After switching:
+
+1. Layout recomputes (`compose()` called with new companion width)
+2. `ccw` / `chh` updated to match new animal's `Size()`
+3. Moon position recalculated
+
+## Windows-Specific Notes
+
+- Path uses `\` not `/` (handled by `filepath.Join`)
+- No AF_UNIX sockets — events use JSON-lines spool (`sock_windows.go`)
+- Companion file is plain text, one line, no special encoding needed
+
+## Test Reference
+
+`companion_live_test.go::TestARunningScapePicksUpTheCompanion` verifies:
+- File write triggers switch after poll interval
+- Layout recomputes for new companion size
+- Moon position adjusts
+
+Run it with:
+```bash
+go test -v -run TestARunningScapePicksUpTheCompanion ./...
+```

@@ -1,3 +1,5 @@
+//go:build darwin
+
 // widthprobe paints a known picture on the ALTERNATE screen and waits, so a
 // driver can change the window's WIDTH from outside and read the cells back.
 //

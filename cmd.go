@@ -53,6 +53,10 @@ func dispatch(args []string) bool {
 		runTune(args[1:])
 	case "companion":
 		os.Exit(cmdCompanion(args[1:]))
+	case "life":
+		os.Exit(cmdLife(args[1:]))
+	case "tamagotchi":
+		os.Exit(cmdTamagotchi(args[1:]))
 	case "scape":
 		os.Exit(cmdScape(args[1:]))
 	case "help", "-h", "--help":
@@ -73,17 +77,20 @@ func usage(w io.Writer) {
   xscapes shades          one frame three ways, to judge the 256 smoothing here
   xscapes tune            fold real recordings through the reducer and report
   xscapes companion       show or set the companion (cat, crab)
-  xscapes scape           show or set the scape (shore, vista, harbour); a running scape switches live
+  xscapes scape           show or set the scape (vista, shore, harbour, rain); a running scape switches live
+  xscapes life            the companion: status, feed, play, walk, explore
+  xscapes tamagotchi      the earlier separate creature (opt-in legacy)
   xscapes inside <cmd>    host any command inside the scape
   xscapes                 render one frame
   xscapes -live           run the scape in this terminal
 
   xscapes install claude  add the hooks to Claude Code (prints a plan; --apply to write)
   xscapes install kimi    the same for Kimi Code CLI (~/.kimi-code/config.toml)
-  xscapes install hermes  the same for Hermes Agent (~/.hermes/config.yaml)
+  xscapes install hermes  the same for Hermes Agent (its config.yaml: $HERMES_HOME, else ~/.hermes, else %LOCALAPPDATA%/hermes)
   xscapes uninstall claude|kimi|hermes
   xscapes kimi            run Kimi Code CLI inside the scape (after 'install kimi')
   xscapes hermes          run Hermes Agent inside the scape (after 'install hermes')
+  xscapes version         print the version, OS and architecture
   xscapes emit <kind>     send one event by hand (for testing)
   xscapes replay <file>   feed a recorded event log to a running scape
   xscapes notify [kind]   play the knock sounds (ask, done, worried, or all three)

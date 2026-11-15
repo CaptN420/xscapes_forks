@@ -1,3 +1,5 @@
+//go:build darwin
+
 // contentprobe measures whether Terminal.app moves CONTENT when the window
 // grows, in the configuration xscapes actually runs in.
 //

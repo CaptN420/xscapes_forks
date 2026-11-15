@@ -77,12 +77,38 @@ func drawVistaWith(c *canvas.Canvas, v *scenes.Vista, lay layout, st reduce.Stat
 	}
 	// The owl, with whatever motion he has picked from the round
 	// (owl_anim.go); no pick draws today's owl exactly.
-	head := owlX + scenes.OwlHeadCol
+	// The owl's own life, when the companion is on: the same engine that drives
+	// the crab, drawn through the bird's five faces. A reaction moves the bird a
+	// cell -- a sway, a hop -- and then paints its event around it.
+	owlState := st.Pose
+	ox, oy := owlX, owlY
+	react, rp, rv := "", 0.0, 0
+	if cat == nil && lifeLive() {
+		p, _ := lifePose(lifeBrain.Intent().Pose)
+		owlState = p
+		react, rp, rv = lifeBrain.Reaction()
+		if hx, hy := scenes.OwlHopOffset(react, rp); hx != 0 || hy != 0 {
+			ox, oy = owlX+hx, owlY+hy
+		}
+	}
+	head := ox + scenes.OwlHeadCol
 	if cat != nil {
 		cat.Draw(c.Near(), owlX, owlY, t, st.Pose)
 		head = owlX + cat.DrawnHeadCol(c.W)
+		dx, w, h := cat.DrawnBox(c.W)
+		setLifeHit(owlX+dx, owlY, w, h)
 	} else {
-		scenes.DrawOwlMoving(c, owlX, owlY, t, st.Pose, scenes.PickedOwlMotion(st.Pose), scenes.OwlMotionPeriodOverride)
+		scenes.DrawOwlMoving(c, ox, oy, t, owlState, scenes.PickedOwlMotion(owlState), scenes.OwlMotionPeriodOverride)
+		if react != "" {
+			scenes.DrawOwlReaction(c, owlX, owlY, rp, react, rv)
+		}
+		// The owl's own box: 12 wide and 7 tall, the same one
+		// drawLifeSpeechNear hangs its line under (boxX+6 centres it,
+		// boxY+7 sits it just below).
+		setLifeHit(owlX, owlY, 12, 7)
+		if lifeLive() {
+			drawLifeSpeechNear(c, owlX, owlY, bandTop)
+		}
 	}
 	if st.Bubble != "" {
 		rows, col := companion.DoneBubble(st.Bubble), bubbleCol

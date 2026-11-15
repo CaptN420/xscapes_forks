@@ -1,3 +1,5 @@
+//go:build darwin
+
 // wheelprobe records what Terminal.app SENDS to a program on the alternate
 // screen when the user turns the mouse wheel, with and without mouse
 // reporting enabled.

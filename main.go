@@ -68,6 +68,10 @@ func main() {
 	// twenty demo flags and the adapters have their own; keeping them in
 	// separate flag sets is what stops `emit -tool` from colliding with a
 	// future `-t` on the renderer.
+	if wantsVersion(os.Args[1:]) {
+		fmt.Println(versionString())
+		return
+	}
 	if dispatch(os.Args[1:]) {
 		return
 	}
@@ -87,6 +91,7 @@ func main() {
 		sheet   = flag.String("sheet", "", "write the companion contact sheet to an HTML file")
 		compare = flag.String("compare", "", "write the rendering comparison to an HTML file")
 		anim    = flag.String("anim", "", "write an animated companion preview to an HTML file")
+		tamanim = flag.String("tamanim", "", "write a sheet of every Tamagotchi animation and transition to an HTML file")
 		strip   = flag.String("strip", "", "write a frame strip (for GIF assembly) to an HTML file")
 		layout  = flag.String("layout", "", "write the layout mockups to an HTML file")
 		ctxdemo = flag.String("context", "", "write the context-moon demo to an HTML file")
@@ -115,6 +120,7 @@ func main() {
 		sandfd  = flag.String("sandfade", "", "tuner: how far the lower beach falls away to black")
 		starfl  = flag.String("starfall", "", "the star-arriving study: write the mockup to an HTML file")
 		catalt  = flag.String("catalts", "", "the cat design round: write the alternatives to an HTML file")
+		catsty = flag.String("catstyle", "", "the cat visual style study: write to an HTML file")
 		decide  = flag.String("decisions", "", "every art decision still open, in one page")
 		site    = flag.String("site", "", "write the submission page: reads <dir>/template.html, writes <dir>/index.html")
 		gifsDir = flag.String("gifs", "", "write the animated clips of the demo turn as frame pages into <dir> (then site/make-gifs.py encodes them)")
@@ -198,6 +204,15 @@ func main() {
 			fmt.Fprintln(os.Stderr, "  ", ln)
 		}
 		fmt.Println(*catalt)
+		return
+	}
+
+	if *catsty != "" {
+		if err := os.WriteFile(*catsty, []byte(catStylePage(*seed)), 0o644); err != nil {
+			fmt.Fprintln(os.Stderr, "xscapes:", err)
+			os.Exit(1)
+		}
+		fmt.Println(*catsty)
 		return
 	}
 
@@ -389,6 +404,15 @@ func main() {
 			os.Exit(1)
 		}
 		fmt.Println(*anim)
+		return
+	}
+
+	if *tamanim != "" {
+		if err := os.WriteFile(*tamanim, []byte(tamAnimPage(12, 48)), 0o644); err != nil {
+			fmt.Fprintln(os.Stderr, "xscapes:", err)
+			os.Exit(1)
+		}
+		fmt.Println(*tamanim)
 		return
 	}
 

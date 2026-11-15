@@ -1,3 +1,5 @@
+//go:build darwin
+
 // shrinkprobe measures what happens to the AGENT'S CURSOR when the window
 // changes size on the alternate screen, through the host's real Rebind, and
 // where a Claude-style RELATIVE redraw then lands.

@@ -138,14 +138,17 @@ func (c *Cat) drawCatNear(l *canvas.Layer, x, y int, t float64, st State, rung i
 	(&Sprite{Rows: q, Body: c.coat}).Draw(l, bx, y)
 
 	glyph, col := catEyeGlyph(st, t)
+	ground, ok := c.eyeGround()
+	if !ok {
+		ground = c.coat
+	}
 	for _, e := range p.eyeCells {
 		ex := bx + e
 		if c.mirror {
 			ex = bx + w - p.eyeWide - e
 		}
-		// Plot, not PlotOn: no ground, so the sky shows around the glyph and
-		// the eye stays the hole he ruled it should be.
-		l.Plot(ex, y+p.eyeRow, glyph, col, 1)
+		// PlotOn with ground: the coat behind the eye, like the crab does.
+		l.PlotOn(ex, y+p.eyeRow, glyph, col, ground, 1)
 	}
 }
 

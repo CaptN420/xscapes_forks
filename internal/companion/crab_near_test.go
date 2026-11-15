@@ -82,21 +82,13 @@ func TestNothingMovesWithTheNearPoseUnset(t *testing.T) {
 		// Resting steps too -- the golden sweeps stepping on and off for every
 		// state -- so the front-view stride moves this hash for the same
 		// reason it moves cat/working. Same change, same scope.
-		{"cat/resting/256 frames", "dfa549e998455be5"},
-		// ⚠ MOVED 2026-09-12: the cat got a FRONT-VIEW mid-stride body. It had
-		// none, so Draw reached for CatWalk -- a 16-cell side view -- inside
-		// the 12-cell box and plotted the eyes 6 and 10 cells off the head.
-		// 4,037 occurrences across 31 recorded sessions, 0.28 s each. Only the
-		// PAW row differs from standing, asserted in stride_test.go, so
-		// nothing above the waist and no eye cell moved.
-		{"cat/working/256 frames", "9da53f52bca90c6d"},
-		// ⚠ MOVED 2026-09-12. The cat had no ask body and no finish body at
-		// all -- both drew the WORKING bitmap, so 97% of a still of either was
-		// also a still of the cat simply working (measured, 1,200 frames a
-		// side, bodies only). Now "Pricked ears" and "Chin up", his picks.
-		{"cat/needs you/256 frames", "2860edf8c100076d"},
-		{"cat/all done/256 frames", "7ec06554e0a9dbd5"},
-		{"cat/something is broken/256 frames", "4197960b244d2275"},
+		{"cat/resting/256 frames", "13261d941d23372d"},
+		// ⚠ MOVED 2026-11-15: changed fur from warm cream (236,228,210) to white (255,255,255).
+		{"cat/working/256 frames", "ad3007df05516cad"},
+		// ⚠ MOVED 2026-11-15: white fur.
+		{"cat/needs you/256 frames", "0037ffd2288aa33d"},
+		{"cat/all done/256 frames", "3271c78b48cff165"},
+		{"cat/something is broken/256 frames", "d7f63e1b56abf705"},
 	}
 	got := shippedFrameHashes(t)
 	if len(got) != len(golden) {

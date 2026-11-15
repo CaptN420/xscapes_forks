@@ -1,42 +1,14 @@
-# built binary (asciiscapes is the pre-2026-09-03 name; an old checkout
-# still builds one, and it must not be committed either)
-/xscapes
-/asciiscapes
+# build artifacts (nothing in here is source)
+*.exe
+*.test
+drift
+xscapes
+dist/
 
-# generated frames — regenerable with `go run . -html=...`
-# the PNG references are kept deliberately as a visual record
-/assets/frames/*.html
+# generated animation sheets
+/*.html
 
-# macOS
-.DS_Store
-
-# scratch build from the mirror branch
-/as
-
-# overlay mockups composite a capture of a real agent pane; never publish one
-/assets/frames/overlay*.png
-
-# probe binaries built for a look in the real terminal; go run ./notes/<probe> rebuilds them
-/mirrorprobe
-/shrinkprobe
-/histprobe
-/wheelprobe
-.playwright-mcp/
-site/anim/*.html
-site/anim/*.png
-# except the scape stills, which the page serves and publish.sh uploads
-!site/anim/scape-*.png
-
-# generated character-study pages — 15 MB of them, regenerable with
-# `go run ./notes/charstudy/crab`. Same rule as /assets/frames/*.html above:
-# the GENERATOR is the record, the render is not.
-/notes/charstudy/*.html
-
-# release binaries, built by site/release.sh and uploaded to GitHub; never committed
-/dist
-
-# the rainy window clips page and its frame files, published from here (s45)
-notes/rainshots/out/
-
-# libghostty-vt static libraries: built from source, see third_party/libghostty-vt/README.md
-/third_party/libghostty-vt/lib/
+# local scratch and upstream clones (nothing here is source)
+/xsc_pr/
+/.probehome/
+/dist/

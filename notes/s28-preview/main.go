@@ -1,3 +1,5 @@
+//go:build darwin
+
 // Command s28-preview shows HIS near-ask idea in HIS terminal, at HIS window
 // size, through the real canvas and the real 256-colour quantiser.
 //

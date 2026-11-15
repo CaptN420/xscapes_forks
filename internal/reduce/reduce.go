@@ -187,6 +187,9 @@ type State struct {
 	// special-cased.
 	Steps   int
 	StepAge float64
+
+	// Tamagotchi is the virtual creature state. Optional: nil means no creature.
+	Tamagotchi *companion.TamagotchiState `json:"tamagotchi,omitempty"`
 }
 
 type inflight struct {
