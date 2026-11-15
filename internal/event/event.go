@@ -40,6 +40,20 @@ const (
 	// 2026-09-17); Claude Code never does, so there the next tool starting
 	// is what clears the ask. It clears the ask and touches nothing else.
 	Answered Kind = "answered"
+	// Tamagotchi events: virtual creature interactions.
+	TamagotchiFeed  Kind = "tamagotchi_feed"
+	TamagotchiPlay  Kind = "tamagotchi_play"
+	TamagotchiSleep Kind = "tamagotchi_sleep"
+	TamagotchiClean Kind = "tamagotchi_clean"
+	TamagotchiSick  Kind = "tamagotchi_sick"
+	TamagotchiPet   Kind = "tamagotchi_pet"
+	TamagotchiTalk  Kind = "tamagotchi_talk"
+	// LifeInteract is one command-line interaction with the companion,
+	// addressed to a RUNNING scape so the animal reacts on screen within a
+	// frame instead of only in the file the next process will read. Target is
+	// the verb ("feed", "pet", ...); Text is the food id when one was named.
+	// It carries nothing else: an interaction is one thing, not a stream.
+	LifeInteract Kind = "life_interact"
 )
 
 // Kinds is every kind the reducer understands, in protocol order.
@@ -53,6 +67,11 @@ var Kinds = []Kind{
 	SessionStart, SessionEnd, Prompt, ToolStart, ToolEnd, Error,
 	TestPass, TestFail, Compact, NeedsInput, Done, SubStart, SubEnd,
 	Todo, Context, Interrupt, Answered,
+	// Tamagotchi creature interactions.
+	TamagotchiFeed, TamagotchiPlay, TamagotchiSleep, TamagotchiClean, TamagotchiSick,
+	TamagotchiPet, TamagotchiTalk,
+	// A live interaction with the companion.
+	LifeInteract,
 }
 
 // Known says the reducer has a meaning for this kind.
@@ -170,7 +189,10 @@ func (e Event) Known() bool {
 	switch e.Kind {
 	case SessionStart, SessionEnd, Prompt, ToolStart, ToolEnd, Error,
 		TestPass, TestFail, Compact, NeedsInput, Done, SubStart, SubEnd,
-		Todo, Context, Interrupt, Answered:
+		Todo, Context, Interrupt, Answered,
+		// Tamagotchi creature interactions.
+		TamagotchiFeed, TamagotchiPlay, TamagotchiSleep, TamagotchiClean, TamagotchiSick,
+		TamagotchiPet, TamagotchiTalk, LifeInteract:
 		return true
 	}
 	return false

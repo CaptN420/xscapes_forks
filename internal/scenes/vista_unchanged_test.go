@@ -18,18 +18,20 @@ import (
 //
 // If this fails on purpose (the vista is redrawn), re-take the hash and say
 // why in the commit. If it fails by accident, the page's clip has changed.
-//
-// One hash per architecture: arm64 fuses multiply-add (FMA) and amd64 does
-// not, so a handful of colours round to a neighbouring cube entry. Measured
-// 2026-11-11: GOARCH=amd64 on the same Mac (Rosetta) gives exactly the hash the
-// Linux CI runner gives, so the split is the chip, not the OS.
 func TestTheStudyVistaIsUnchanged(t *testing.T) {
-	want, ok := map[string]string{
+	// The original golden does not reproduce on amd64 (Windows 11, go1.27.4;
+	// identical with GOAMD64=v3, and at the repo's first commit, so it is not
+	// a regression). Suspected cause: float math fused on arm64 only; not
+	// isolated. One golden per architecture, each from a real run there: arm64
+	// is the original recording, amd64 was taken 2026-11-14. An unknown GOARCH
+	// skips rather than fail against someone else's floats.
+	goldens := map[string]string{
 		"arm64": "24c6c0f42e5ac13187b4c3ad6ad294d2c00a07faebe279b03ab5125550c6dc9b",
 		"amd64": "00810ba69ac183e59cde87c458791beb6439ef4fd53067006a7e112f2d4d81c4",
-	}[runtime.GOARCH]
+	}
+	want, ok := goldens[runtime.GOARCH]
 	if !ok {
-		t.Skipf("no reference hash taken on %s", runtime.GOARCH)
+		t.Skipf("no golden recorded for GOARCH=%s", runtime.GOARCH)
 	}
 	h := sha256.New()
 	for _, tod := range []float64{0, 0.24, 0.5, 0.78} {

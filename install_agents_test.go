@@ -271,6 +271,11 @@ func TestAgentInstallBacksUpTheOriginal(t *testing.T) {
 // and nothing on screen would say so. His first Kimi run, 2026-09-17: no
 // owlets, no spend, no tool names, and the config had no hooks at all.
 func TestTheLauncherKnowsWhenHooksAreMissing(t *testing.T) {
+	// The contract now reads $HERMES_HOME first, and the agent that runs
+	// these tests exports one: clear it, or the launcher looks at the real
+	// profile instead of the temp home this test just built.
+	t.Setenv("HERMES_HOME", "")
+
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	for _, agent := range []string{"claude", "kimi", "hermes"} {
@@ -383,6 +388,11 @@ func TestKimiInstallHonoursKimiCodeHome(t *testing.T) {
 //  4. `hooks = [...]` under a TOML table is that table's key: the Kimi
 //     installer must not refuse it as the top-level one.
 func TestTheLauncherChecksMoreThanTheMarker(t *testing.T) {
+	// The contract now reads $HERMES_HOME first, and the agent that runs
+	// these tests exports one: clear it, or the launcher looks at the real
+	// profile instead of the temp home this test just built.
+	t.Setenv("HERMES_HOME", "")
+
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	kp := filepath.Join(home, ".kimi-code", "config.toml")
@@ -510,6 +520,13 @@ func TestTheLauncherChecksMoreThanTheMarker(t *testing.T) {
 func TestTheHermesPluginCountsAsInstalled(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	// hermesConfigPath reads $HERMES_HOME and, when that home has a profiles/
+	// directory, the profile inside it. On a machine running Hermes that is the
+	// real agent config, so the test would inspect the user's installation
+	// instead of its fixture -- which is exactly what it did here: it found
+	// fifteen hooks of a genuine install and called the state "full".
+	t.Setenv("HERMES_HOME", filepath.Join(home, ".hermes"))
+	t.Setenv("HERMES_PROFILE", "")
 	cfg := filepath.Join(home, ".hermes", "config.yaml")
 	plug := filepath.Join(home, ".hermes", "plugins", "xscapes")
 	if err := os.MkdirAll(plug, 0o755); err != nil {
@@ -545,7 +562,7 @@ func TestTheHermesPluginCountsAsInstalled(t *testing.T) {
 	if st, _, _, _ := hooksState("hermes"); st != hooksNone {
 		t.Errorf("no plugin, no hooks: state %d, want none", st)
 	}
-	if msg := missingHooks("hermes", cfg); !strings.Contains(msg, "hermes plugins install xscapes") {
+	if msg := missingHooks("hermes", cfg); !strings.Contains(msg, "hermes plugins install donlucasx/hermes-xscapes") {
 		t.Errorf("the missing message does not offer the plugin:\n%s", msg)
 	}
 }

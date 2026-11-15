@@ -7,9 +7,10 @@
 #
 # Run it from a CLEAN tree with HEAD at the tag: go build stamps the
 # revision, and a dirty tree stamps vcs.modified=true and the wrong SHA,
-# which is the same rule the installed binary follows. The four targets are
-# the platforms internal/host has a pty file for, darwin and linux on arm64
-# and amd64, built with cgo off so the build runs anywhere.
+# which is the same rule the installed binary follows. The targets are
+# the platforms internal/host has a pty file for (darwin and linux, arm64 and
+# amd64) plus Windows (amd64 and arm64), built with cgo off so the build runs
+# anywhere. The version is stamped into the binary: `xscapes version`.
 #
 # install.sh fetches <release>/latest/download/xscapes-<os>-<arch>, so the
 # asset names here are part of the contract.
@@ -33,12 +34,25 @@ if [ "$at" != "$tag" ]; then
 fi
 rm -rf dist
 mkdir dist
-for t in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64; do
-  GOOS=${t%/*} GOARCH=${t#*/} CGO_ENABLED=0 go build -trimpath -o "dist/xscapes-${t%/*}-${t#*/}" .
+# Six targets: the platforms internal/host has a pty file for (darwin and
+# linux, arm64 and amd64) plus Windows on ConPTY (amd64 and arm64). Windows
+# assets keep the .exe, and install.ps1 asks for exactly these names.
+for t in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64 windows/arm64; do
+  os=${t%/*}
+  arch=${t#*/}
+  ext=
+  [ "$os" = windows ] && ext=.exe
+  GOOS=$os GOARCH=$arch CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=$tag"     -o "dist/xscapes-$os-$arch$ext" .
 done
-(cd dist && shasum -a 256 xscapes-* >checksums.txt)
+# sha256sum on Linux and Git Bash, shasum on macOS; one file, two spaces, the
+# format both installers parse.
+if command -v sha256sum >/dev/null 2>&1; then
+  (cd dist && sha256sum xscapes-* >checksums.txt)
+else
+  (cd dist && shasum -a 256 xscapes-* >checksums.txt)
+fi
 ls -l dist
-go version -m dist/xscapes-darwin-arm64 | grep -E 'vcs\.(revision|modified)'
+go version -m dist/xscapes-linux-amd64 | grep -E 'vcs\.(revision|modified)'
 if [ $dry = yes ]; then
   exit 0
 fi

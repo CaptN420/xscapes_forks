@@ -1,3 +1,5 @@
+//go:build darwin
+
 // histprobe measures ONE fact the scrollback plan rests on: does Terminal.app
 // put lines that scroll out of a row-1 DECSTBM band on the ALTERNATE screen
 // into the tab's history, where the user can scroll to them?

@@ -43,7 +43,7 @@ func (s State) String() string {
 }
 
 var (
-	furCol = term.RGB{R: 236, G: 228, B: 210}
+	furCol = term.RGB{R: 255, G: 255, B: 255}
 	eyeCol = term.RGB{R: 168, G: 236, B: 176} // moonlit shine, not a highlight
 	// EyeAlert is the open eye of the NeedsYou pose, and it is EXPORTED so that
 	// a test outside this package can find the companion's FACE on a rendered
@@ -110,6 +110,10 @@ type Cat struct {
 	// need it too.
 	stepping bool
 
+	// scale is how large the animal is drawn, 1 being the shipped crab. Growth
+	// is the only thing that sets it; see crab_grow.go.
+	scale float64
+
 	// approach is how far along the come-closer walk the companion is: 0 at
 	// home, 1 at the near pose. The one piece of state the companion carries
 	// BETWEEN frames -- everything else here is recomputed every draw -- and
@@ -126,6 +130,10 @@ func (c *Cat) SetFace(f Face) { c.face = f }
 
 // SetCoat chooses the body colour.
 func (c *Cat) SetCoat(col term.RGB) { c.coat = col }
+
+// Coat is the body colour, so a caller can read back what the animal is
+// wearing without reaching into the field (lifeCoat bases its age ramp on it).
+func (c *Cat) Coat() term.RGB { return c.coat }
 
 // Eye fills. The eyes are characters plotted in gaps of the body bitmap, so
 // by default an eye cell shows the SCENE behind the head: dark water at
@@ -183,7 +191,13 @@ var catEyeCells = [2]int{2, 6}
 // midpoint is the cell between them either way.
 func (c *Cat) HeadCol() int {
 	if c.kind == KindCrab {
-		return (crabEyeCells[0] + crabEyeCells[1] + 1) / 2
+		if !c.scaled() {
+			return baseCrabHead()
+		}
+		// The face moves with the smaller body: the balloon has to follow it,
+		// or it points at the sand beside a hatchling.
+		_, _, dx, _ := c.grownBox()
+		return dx + (c.grownEyeX(0)+c.grownEyeX(1)+1)/2
 	}
 	a, b := catEyeCells[0], catEyeCells[1]
 	if c.mirror {

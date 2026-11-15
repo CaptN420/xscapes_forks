@@ -2,6 +2,7 @@ package main
 
 import (
 	"math"
+	"strings"
 	"time"
 
 	"github.com/donlucasx/xscapes/internal/canvas"
@@ -75,6 +76,11 @@ type frames struct {
 	scapeName      string
 	ascii          bool
 	nextScapeCheck time.Time
+	// rainView is the current rain clip index (-1 means no rain). When the
+	// scape switches to ScapeRain, refreshScape cycles through the three
+	// views; when it switches away, this resets to -1 so the shore path
+	// is taken again.
+	rainView int
 	// evlog is XSCAPES_EVENTLOG, the file every applied event is appended
 	// to (eventlog.go); evDropped/evBad are the bus counts last written.
 	evlog            string
@@ -83,6 +89,13 @@ type frames struct {
 	// same log line as the bus counts; nil when nothing hosts an agent.
 	erases   func() int64
 	evErased int64
+
+	// Tamagotchi: optional virtual creature overlay.
+	// life is the companion's own living (internal/life). It is the default
+	// companion; tamagotchi below is the earlier, separate creature and is now
+	// opt-in legacy, so one animal is on screen unless someone asks for both.
+	life       bool
+	tamagotchi bool
 }
 
 // companionPoll is how often a running scape re-reads the saved companion.
@@ -122,6 +135,24 @@ func (f *frames) refreshCompanion(now time.Time) {
 	f.sh.MoonX = f.lay.MoonX
 }
 
+// isOn reads the ways a person writes "yes" to an environment switch.
+func isOn(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "on", "1", "true", "yes":
+		return true
+	}
+	return false
+}
+
+// isOff reads the ways a person writes "no" to an environment switch.
+func isOff(v string) bool {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "off", "0", "false", "no", "none":
+		return true
+	}
+	return false
+}
+
 func newFrames(w, h int, seed int64, ascii, mirror bool, ctxUsed, tod float64) *frames {
 	c := canvas.New(w, h, canvas.AlphaFar, canvas.AlphaMid, canvas.AlphaNear)
 	sh := scape.NewShore(seed, ascii)
@@ -136,8 +167,15 @@ func newFrames(w, h int, seed int64, ascii, mirror bool, ctxUsed, tod float64) *
 		player: notify.New(), ctxUsed: ctxUsed, tod: tod, level: -1, start: time.Now(),
 		ascii: ascii, scapeName: ScapeShore,
 		evlog: logPath(envx.Lookup("EVENTLOG"), "events.jsonl"),
+		// The old creature is now opt-in: two companions was one too many.
+		tamagotchi: isOn(envx.Lookup("TAMAGOTCHI")),
+		life:       !isOff(envx.Lookup("LIFE")),
+		rainView:   -1,
 	}
 	f.refreshScape(time.Time{})
+	// refreshScape returns early when nothing changed, which it always is at
+	// start-up, so the spectators are started here as well as on a switch.
+	initBanter(f)
 	return f
 }
 
@@ -158,6 +196,7 @@ func (f *frames) refreshScape(now time.Time) {
 	switch name {
 	case ScapeVista:
 		f.vista = scenes.NewVista(f.seed, f.ascii)
+		f.rainView = -1
 	case ScapeHarbour:
 		// The harbour's companion is the cat, whatever the shore's is: it
 		// sits on the sill and walks up one rung.
@@ -165,7 +204,18 @@ func (f *frames) refreshScape(now time.Time) {
 		f.harbourCat = companion.New(companion.NameCat)
 		f.harbourCat.FaceLeft(f.mirror)
 		f.harbourCat.MaxRung = 1
+		f.rainView = -1
+	case ScapeRain:
+		// Cycle through the three rain views each time we switch in.
+		f.rainView = (f.rainView + 1) % 3
+	default:
+		// Switching away from rain resets the clip index so the shore path
+		// is taken again on the next frame.
+		f.rainView = -1
 	}
+	// The spectators are whoever belongs to the world that is now showing, and
+	// the escalation ladder starts fresh with the scenery.
+	initBanter(f)
 }
 
 // resize refits the scene, and says whether the window got smaller -- the only
@@ -211,6 +261,18 @@ func (f *frames) state(now time.Time, t float64) reduce.State {
 	for draining := f.bus != nil; draining; {
 		select {
 		case e := <-f.bus.C:
+			// The spectators watch the same events the water does.
+			feedBanter(e, now)
+			// A command typed in another terminal reaches the companion here,
+			// so the animal reacts in this frame rather than in the file the
+			// next process reads.
+			if handleLifeEvent(e) {
+				break
+			}
+			// Handle Tamagotchi events first
+			if handleTamagotchiEvent(e) {
+				break
+			}
 			f.red.Apply(e, now)
 			if f.evlog != "" {
 				appendEventLog(f.evlog, e, now)
@@ -231,6 +293,12 @@ func (f *frames) state(now time.Time, t float64) reduce.State {
 		}
 	}
 	st := f.red.State(now)
+
+	// Update Tamagotchi state if enabled (legacy, opt-in)
+	if f.tamagotchi && tamagotchiState != nil {
+		updateTamagotchi(now, &st)
+	}
+
 	// The spend, summed off the transcript every two seconds (his ask of
 	// 2026-09-16, drawTokens). An adapter that sends a figure of its own
 	// wins; the Claude adapter sends none, its payload has no such total.
@@ -282,9 +350,29 @@ func (f *frames) state(now time.Time, t float64) reduce.State {
 // demo cycles every state on a timer, and a scape nobody attached to has
 // nothing to announce.
 func (f *frames) frame(now time.Time) string {
+	return f.composeFrame(now).Render(f.profile)
+}
+
+// composeFrame is everything frame does except turn the canvas into bytes, so
+// a caller that writes a DIFF (the live loop; see canvas.Screen) does not have
+// to render the frame twice to find out what changed.
+func (f *frames) composeFrame(now time.Time) *canvas.Canvas {
 	f.refreshCompanion(now)
 	t := now.Sub(f.start).Seconds()
 	st := f.state(now, t)
+	// The spectators' clock, and their one per-frame duty: noticing a tool that
+	// has been running too long, whether or not anything is being drawn.
+	banterNow = now
+	if banterLive() {
+		banterEngine.Tick(now)
+		banterWatch(now)
+	}
+	// The animal lives whether or not a session is being followed, and before
+	// anything is drawn -- including the demo and `-print` paths, which have no
+	// reducer at all. One tick per frame, in one place.
+	if f.life {
+		updateLife(now, st)
+	}
 	if f.red != nil {
 		// The pose is consulted for one thing only: a finish while the
 		// companion is still worried is the third knock (his ruling of
@@ -323,13 +411,23 @@ func (f *frames) frame(now time.Time) string {
 
 	f.refreshScape(now)
 	f.compose(st, t)
-	return f.c.Render(f.profile)
+	return f.c
 }
 
 // compose paints one state at one time into f.c through the scape in use:
 // the vista or the shore, each through its own composer. The live frame
 // and the tests share it, so a test composes exactly what the loop draws.
 func (f *frames) compose(st reduce.State, t float64) {
+	// The frame's own switch decides whether this drawing carries the animal;
+	// see lifeLive.
+	lifeInFrame = f.life
+	if f.rainView >= 0 {
+		// The rain is a scripted clip: one of three pre-rendered views that
+		// cycle each time the scape switches to ScapeRain. It replaces the
+		// shore, vista and harbour entirely.
+		scenes.PaintRainFrame(f.c, f.rainView, t, f.seed)
+		return
+	}
 	if f.harbour != nil {
 		f.harbour.CatX = f.lay.CatX
 		f.harbour.Kittens, f.harbour.Exits = st.Kittens, st.KittenExits
@@ -341,9 +439,25 @@ func (f *frames) compose(st reduce.State, t float64) {
 		f.vista.OwlX = f.lay.CatX
 		f.vista.Update(f.c, t, st.Act)
 		drawVista(f.c, f.vista, f.lay, st, t)
+		if banterLive() {
+			owlX, owlY, _, bandTop := f.vista.Layout()
+			drawBanterVista(f.c, owlX, owlY, bandTop)
+		}
 		return
 	}
 	f.sh.Update(f.c, t, st.Act)
 	top := f.c.H - 2 - f.chh
 	drawScene(f.c, f.sh, f.cat, f.lay, st, t, f.seed, top)
+	if banterLive() {
+		// The same cell drawScene put the crab in, so a line lands over the
+		// creature that is saying it rather than over where it used to stand.
+		dx, _ := pace(st, f.c.W)
+		catX := f.lay.CatX + int(math.Round(paceOffsetOf(dx, f.lay))) + lifeOffset(f.lay.Mirror, f.lay.PaceSpan)
+		drawBanterShore(f.c, catX, top, 0, f.lay.Mirror)
+	}
+
+	// Draw Tamagotchi overlay if enabled
+	if f.tamagotchi && tamagotchiState != nil {
+		drawTamagotchi(f.c, st, t)
+	}
 }

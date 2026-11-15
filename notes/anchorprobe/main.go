@@ -1,3 +1,5 @@
+//go:build darwin
+
 // anchorprobe measures ONE fact xscapes currently guesses at: when a
 // Terminal.app window shrinks while the ALTERNATE screen is up, does the
 // terminal keep the TOP of the screen or the BOTTOM?

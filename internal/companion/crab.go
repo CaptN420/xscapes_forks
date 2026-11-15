@@ -26,10 +26,8 @@ import (
 // crab raises a claw, and a raised claw is POSITION, so it survives a
 // screenshot. The encoding rule asks for exactly that.
 
-// CrabCoat is salmon, index 210 of the cube. Locked 2026-09-07. It is an exact
-// cube entry, so it survives the glyph path's 2.6x saturate unchanged -- every
-// coat the cat ships with is a near-neutral the boost leaves alone, and this is
-// the first companion colour with enough chroma that it had to be checked.
+// CrabCoat is coral, index from charstudy notes. It is an exact
+// cube entry, so it survives the glyph path's 2.6x saturate unchanged.
 var CrabCoat = term.RGB{R: 255, G: 135, B: 135}
 
 var crabLower = []string{
@@ -362,9 +360,18 @@ func (c *Cat) drawCrab(l *canvas.Layer, x, y int, t float64, st State) {
 	if c.mirror {
 		f = f.Mirrored()
 	}
+	// Growing up: the same sprite, resampled inside the same box. Nothing about
+	// the pose, the breathing or the mirroring changes -- only how many cells the
+	// animal takes up. See crab_grow.go for why the box itself never shrinks.
+	dx, dy := 0, 0
+	if c.scaled() {
+		w, h, gx, gy := c.grownBox()
+		f = resizeInk(f, w*2, h*4)
+		dx, dy = gx, gy
+	}
 	q := f.ToQuadrant()
-	plotRim(l, q, x, y)
-	(&Sprite{Rows: q, Body: c.coat}).Draw(l, x, y)
+	plotRim(l, q, x+dx, y+dy)
+	(&Sprite{Rows: q, Body: c.coat}).Draw(l, x+dx, y+dy)
 
 	glyph, col := 'o', eyeCol
 	switch st {
@@ -381,16 +388,20 @@ func (c *Cat) drawCrab(l *canvas.Layer, x, y int, t float64, st State) {
 		glyph = '-' // blink
 	}
 	w, _ := c.Size()
-	for _, e := range crabEyeCells {
+	for i, e := range crabEyeCells {
 		ex := x + e
-		if c.mirror {
+		ey := y + crabEyeRow
+		if c.scaled() {
+			ex = x + dx + c.grownEyeX(i)
+			ey = y + dy + c.grownEyeRow()
+		} else if c.mirror {
 			ex = x + w - 1 - e
 		}
 		if ground, ok := c.eyeGround(); ok {
-			l.PlotOn(ex, y+crabEyeRow, glyph, col, ground, 1)
+			l.PlotOn(ex, ey, glyph, col, ground, 1)
 			continue
 		}
-		l.Plot(ex, y+crabEyeRow, glyph, col, 1)
+		l.Plot(ex, ey, glyph, col, 1)
 	}
 }
 

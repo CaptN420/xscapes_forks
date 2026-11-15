@@ -1,3 +1,5 @@
+//go:build darwin
+
 // mirrorprobe measures whether rows can be written into the MAIN buffer's
 // scrollback while the ALTERNATE screen stays on display, by switching buffers
 // without a clear (DECSET 47) around each write.

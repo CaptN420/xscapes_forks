@@ -1,0 +1,38 @@
+name: release
+
+# Push a tag (git tag v0.4.2 && git push origin v0.4.2) and this builds the six
+# binaries and checksums.txt that install.sh and install.ps1 download, and
+# attaches them to a GitHub release. site/release.sh does the same by hand.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: test
+        run: go test -timeout 20m ./...
+      - name: build
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          mkdir dist
+          for t in darwin/arm64 darwin/amd64 linux/amd64 linux/arm64 windows/amd64 windows/arm64; do
+            os=${t%/*}; arch=${t#*/}; ext=; [ "$os" = windows ] && ext=.exe
+            GOOS=$os GOARCH=$arch go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" \
+              -o "dist/xscapes-$os-$arch$ext" .
+          done
+          (cd dist && sha256sum xscapes-* > checksums.txt)
+      - name: publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --title "$GITHUB_REF_NAME" --generate-notes

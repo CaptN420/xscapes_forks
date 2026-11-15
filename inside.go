@@ -145,6 +145,18 @@ With no command, runs claude.
 	launched := time.Now()
 
 	fr := newFrames(cols, max(scapeRows, 1), *seed, *ascii, *mirror, *ctxUsed, *tod)
+	// The hosted path draws the same frames, so it grows the same creature; and
+	// the life is kept when the host closes, like the standalone scape does.
+	if fr.tamagotchi && !tamagotchiLive() {
+		initTamagotchi()
+		defer saveTamagotchi()
+	}
+	if fr.life {
+		initLife()
+		initLifeAI()
+		defer saveLife()
+		defer closeLifeAI()
+	}
 	defer func() {
 		if fr.bus != nil {
 			fr.bus.Close()

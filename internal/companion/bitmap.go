@@ -76,6 +76,9 @@ func (b *Bitmap) at(x, y int) bool {
 	return b.On[y*b.W+x]
 }
 
+// At is the exported accessor for at.
+func (b *Bitmap) At(x, y int) bool { return b.at(x, y) }
+
 // ToBraille packs 2x4 pixels per cell. Dot bits are not in reading order --
 // the low six are the historic 6-dot layout and dots 7,8 were appended later.
 func (b *Bitmap) ToBraille() []string {

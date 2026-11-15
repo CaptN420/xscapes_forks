@@ -133,7 +133,20 @@ var OwlMotions = map[companion.State][]OwlMotion{
 				}
 				return OwlMod{}
 			}},
-	},
+		// NEW: more life in resting state
+		{Name: "dreamy", Note: "slow breathing (body lifts), one eye twitches open occasionally: peaceful rest every 15 s", Period: 15, Round: 1,
+			At: func(u float64) OwlMod {
+				m := OwlMod{}
+				if in(u, 0, 0.3) || in(u, 7.5, 7.8) {
+					m.DY = 2 // slow breath lift
+				}
+				if in(u, 0.5, 0.7) || in(u, 8, 8.2) {
+					m.Lids = LidsOpen // one eye twitches open
+					m.OneEye = true
+				}
+				return m
+			}},
+		},
 	companion.Working: {
 		{Name: "today", Note: "open, one blink every 7 s", Period: 8},
 		{Name: "look away", Note: "the pupils go the other way for 1.2 s every 9 s", Period: 9,
@@ -226,7 +239,19 @@ var OwlMotions = map[companion.State][]OwlMotion{
 				}
 				return OwlMod{}
 			}},
-	},
+		// NEW: more eager life in working state
+		{Name: "eager", Note: "quick hop with wings out, looks around: ready to help every 8 s", Period: 8, Round: 1,
+			At: func(u float64) OwlMod {
+				m := OwlMod{Wings: 3}
+				if in(u, 0, 0.2) || in(u, 4, 4.2) {
+					m.Hop = 1 // quick hop
+				}
+				if in(u, 0.2, 0.8) || in(u, 4.2, 4.8) {
+					m.Look = 1 // look around
+				}
+				return m
+			}},
+		},
 	companion.NeedsYou: {
 		{Name: "today", Note: "wide, still", Period: 4},
 		{Name: "blink", Note: "wide, one blink every 3 s", Period: 3,
@@ -271,7 +296,19 @@ var OwlMotions = map[companion.State][]OwlMotion{
 				}
 				return OwlMod{}
 			}},
-	},
+		// NEW: more urgent life in needs-you state
+		{Name: "urgent", Note: "double blink with wings spread wide, body leans forward: really needs you now every 5 s", Period: 5, Round: 1,
+			At: func(u float64) OwlMod {
+				m := OwlMod{Wings: 1} // wings spread wide
+				if in(u, 0, 0.15) || in(u, 0.3, 0.45) || in(u, 2.5, 2.65) || in(u, 2.8, 2.95) {
+					m.Lids = LidsDown // double blink
+				}
+				if in(u, 0.5, 0.7) || in(u, 3, 3.2) {
+					m.DY = -2 // body leans forward (up)
+				}
+				return m
+			}},
+		},
 	companion.Done: {
 		{Name: "today", Note: "^ ^, still", Period: 5},
 		{Name: "bounce", Note: "two hops, one row each, every 5 s", Period: 5,
@@ -308,7 +345,16 @@ var OwlMotions = map[companion.State][]OwlMotion{
 				}
 				return OwlMod{}
 			}},
-	},
+		// NEW: more triumphant life in done state
+		{Name: "triumphant", Note: "wings spread high, big bounce, holds pose: victory every 6 s", Period: 6, Round: 1,
+			At: func(u float64) OwlMod {
+				m := OwlMod{Wings: 2} // wings up high
+				if in(u, 0, 0.3) || in(u, 3, 3.3) {
+					m.Hop = 1 // big bounce
+				}
+				return m
+			}},
+		},
 	companion.Worried: {
 		{Name: "today", Note: "amber slits, still", Period: 6},
 		{Name: "dart", Note: "the slit pupils flick the other way for 0.4 s every 3 s", Period: 3, Round: 1,
@@ -393,7 +439,47 @@ var OwlMotions = map[companion.State][]OwlMotion{
 				}
 				return m
 			}},
-	},
+		// NEW: more expressive reactions for when things go wrong (tool call fails)
+		{Name: "startled", Note: "eyes fly wide, pupils dart left then right, wings snap out: sudden alarm every 4 s", Period: 4, Round: 1,
+			At: func(u float64) OwlMod {
+				m := OwlMod{Lids: LidsOpen}
+				if in(u, 0, 0.3) {
+					m.Wings = 1 // wings snap out
+					m.Look = 1
+				} else if in(u, 0.3, 0.6) {
+					m.Look = 0 // dart back
+				} else if in(u, 0.6, 0.8) {
+					m.Wings = 3 // settle wings
+				}
+				return m
+			}},
+		{Name: "fearful", Note: "body sinks, wings half-out, pupils narrow to amber slits that dart: sustained worry every 5 s", Period: 5, Round: 1,
+			At: func(u float64) OwlMod {
+				m := OwlMod{DY: -2, Wings: 3}
+				if in(u, 0, 0.4) || in(u, 2, 2.4) {
+					m.Look = 1 // dart left
+				} else if in(u, 0.4, 0.8) || in(u, 2.4, 2.8) {
+					m.Look = 0 // dart right
+				}
+				return m
+			}},
+		{Name: "concerned", Note: "brows raised toward middle, slow blink, gaze drops down: thinking about what went wrong every 6 s", Period: 6, Round: 1,
+			At: func(u float64) OwlMod {
+				m := OwlMod{Brows: true}
+				if in(u, 0, 0.5) || in(u, 3, 3.5) {
+					m.Lids = LidsDown // slow blink
+				}
+				return m
+			}},
+		{Name: "dejection", Note: "body sinks two cells, one wing droops low, eyes narrow to tired slits: tool call failed, owl is down every 7 s", Period: 7, Round: 1,
+			At: func(u float64) OwlMod {
+				m := OwlMod{DY: -4, Wings: 5} // one wing droops (index 5 = one small out, low)
+				if in(u, 0, 0.3) || in(u, 3.5, 3.8) {
+					m.Lids = LidsSlit // tired slits
+				}
+				return m
+			}},
+		},
 }
 
 // OwlMotionPick is the candidate the live vista draws per state; absent or

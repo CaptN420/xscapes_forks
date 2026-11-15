@@ -139,12 +139,16 @@ func TestEndToEndFromRealHookPayloads(t *testing.T) {
 				}
 			}
 		}
-		// Drain until the bus goes quiet.
+		// Drain until the bus goes quiet. The quiet window has to cover the
+		// spool's poll: this test drives the real transport, and on a platform
+		// without unix sockets every event reaches the bus through the spool
+		// file, which is read every SpoolPoll. A 50ms window asserted "the
+		// event was lost" when the event was simply not due yet.
 		for {
 			select {
 			case e := <-bus.C:
 				red.Apply(e, now)
-			case <-time.After(50 * time.Millisecond):
+			case <-time.After(2 * event.SpoolPoll):
 				return red.State(now)
 			}
 		}

@@ -7,67 +7,15 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-	"unsafe"
 
 	"github.com/donlucasx/xscapes/internal/canvas"
 	"github.com/donlucasx/xscapes/internal/companion"
 	"github.com/donlucasx/xscapes/internal/event"
+	"github.com/donlucasx/xscapes/internal/host"
 	"github.com/donlucasx/xscapes/internal/reduce"
 	"github.com/donlucasx/xscapes/internal/scape"
 	"github.com/donlucasx/xscapes/internal/term"
 )
-
-// termSize asks the kernel how big the window is, via the TIOCGWINSZ ioctl.
-//
-// It used to shell out to `stty size`, which is where this went wrong: stty
-// reads the size from its STDIN, and a child started by exec.Command inherits
-// /dev/null unless told otherwise, so it printed "stdin isn't a terminal" and
-// termSize silently returned the 80x24 fallback -- every time, on every
-// machine. The scene has therefore always been 80x24 no matter how big the
-// window was, which is one bug wearing three costumes: a scene that does not
-// fill the frame, a scene that garbles when the window is shrunk below 80
-// columns (the over-long lines wrap), and a scene that never repaints on a
-// resize (the "new" size always compared equal to the old one).
-//
-// The ioctl has no such problem, needs no subprocess, and costs microseconds
-// rather than milliseconds. Ask the controlling terminal directly rather than
-// any particular stream, so a redirected stdout does not blind us.
-func termSize() (w, h int) {
-	for _, fd := range ttyFDs() {
-		if c, r, ok := winSize(fd); ok {
-			return c, r
-		}
-	}
-	return 80, 24
-}
-
-// ttyFDs lists the descriptors worth asking, most authoritative first. If all
-// three standard streams are redirected, /dev/tty still reaches the terminal
-// this process is attached to.
-func ttyFDs() []uintptr {
-	fds := []uintptr{os.Stdout.Fd(), os.Stderr.Fd(), os.Stdin.Fd()}
-	if f, err := os.OpenFile("/dev/tty", os.O_RDONLY, 0); err == nil {
-		defer f.Close()
-		fds = append(fds, f.Fd())
-	}
-	return fds
-}
-
-// winsize mirrors struct winsize from <sys/ioctl.h>: rows, cols, then the
-// pixel dimensions, which nothing reports reliably and we do not use.
-type winsize struct {
-	rows, cols, xpixel, ypixel uint16
-}
-
-func winSize(fd uintptr) (cols, rows int, ok bool) {
-	var ws winsize
-	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, fd,
-		uintptr(syscall.TIOCGWINSZ), uintptr(unsafe.Pointer(&ws)))
-	if errno != 0 || ws.cols < 8 || ws.rows < 4 {
-		return 0, 0, false
-	}
-	return int(ws.cols), int(ws.rows), true
-}
 
 // runLive paints the scape to this terminal until interrupted. This is the
 // only view that proves anything: the HTML harness models glyph advances, a
@@ -144,25 +92,80 @@ func runLive(seed int64, fps float64, wIn, hIn int, ctxUsed, tod float64, ascii 
 	// the drag. An ioctl costs microseconds, so simply asking every frame
 	// coalesces the whole drag for free.
 	winch := make(chan os.Signal, 1)
-	signal.Notify(winch, syscall.SIGWINCH)
+	notifyResize(winch)
 
 	// The alternate screen buffer gives the scene a page of its own: nothing
 	// of the shell shows through, and quitting puts the terminal back exactly
 	// as it was rather than leaving a beach in the scrollback.
-	restore := func() { fmt.Print("\x1b[0m\x1b[?25h\x1b[?1049l") }
+	//
+	// unrawInput is set once mouse input is on, and is part of the restore, so
+	// every exit path -- Ctrl-C as a signal, Ctrl-C as a byte, a normal return
+	// -- puts the console back. A scape that left the mouse reporting would
+	// spray escape codes into the shell it returned to.
+	var unrawInput func()
+	restore := func() {
+		fmt.Print(mouseOff)
+		if unrawInput != nil {
+			unrawInput()
+		}
+		fmt.Print("\x1b[0m\x1b[?25h\x1b[?1049l")
+	}
+	// One shutdown, shared by the signal handler and the input reader: save,
+	// restore, and go.
+	shutdown := func() {
+		if f.bus != nil {
+			f.bus.Close()
+		}
+		saveTamagotchi()
+		saveLife()
+		restore()
+		os.Exit(0)
+	}
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-sig
-		if f.bus != nil {
-			f.bus.Close()
-		}
-		restore()
-		os.Exit(0)
+		shutdown()
 	}()
 
 	fmt.Print("\x1b[?1049h\x1b[?25l\x1b[2J") // alt screen, hide cursor, clear once
 	defer restore()
+	// One life: the creature wakes up where it left off, and is saved when the
+	// scape closes. A Tamagotchi whose mood resets every launch is a screen
+	// saver with a face.
+	if f.tamagotchi && !tamagotchiLive() {
+		initTamagotchi()
+	}
+	defer saveTamagotchi()
+	if f.life {
+		initLife()
+		initLifeAI()
+		defer saveLife()
+		defer closeLifeAI()
+	}
+
+	// Clicking the animal. stdin goes to raw mode and the terminal is asked to
+	// report SGR mouse; a reader goroutine decodes clicks and the loop applies
+	// them against the box the last frame drew. Opt out with XSCAPES_MOUSE=off,
+	// which also gives the mouse back to the terminal's own text selection.
+	var input *liveInput
+	if mouseWanted && f.life {
+		if unraw, err := host.EnterLiveInput(); err == nil {
+			unrawInput = unraw
+			fmt.Print(mouseOn)
+			// A generous buffer: a reader can decode a whole read's worth of
+			// reports before the loop drains, and a dropped click is a click
+			// that silently did nothing.
+			input = &liveInput{clicks: make(chan mouseClick, 1024), quit: make(chan struct{}, 1)}
+			go readMouse(os.Stdin, input)
+		}
+	}
+
+	// The screen diff: after the one clear above, every frame writes only the
+	// cells that changed. On Windows Terminal that is the difference between a
+	// few hundred bytes a frame and a few thousand, down a ConPTY that parses
+	// every one of them twice.
+	screen := canvas.NewScreen()
 
 	// A zero fps builds a ticker with a zero duration (panic), and anything
 	// under one frame a second fights the shore's own large-gap clamp.
@@ -178,6 +181,13 @@ func runLive(seed int64, fps float64, wIn, hIn int, ctxUsed, tod float64, ascii 
 	var nextBind time.Time
 	for range tick.C {
 		now := time.Now()
+
+		// A click on the animal, or a Ctrl-C that arrived as a byte in raw
+		// mode. Applied before the frame is composed, so the reaction it starts
+		// is drawn by this very frame.
+		if input != nil {
+			drainInput(input, shutdown)
+		}
 
 		// Drain any pending signals so they do not queue up during a drag.
 		for drained := true; drained; {
@@ -195,6 +205,7 @@ func runLive(seed int64, fps float64, wIn, hIn int, ctxUsed, tod float64, ascii 
 				// step of a drag.
 				if f.resize(nw, nh-1) {
 					fmt.Print("\x1b[2J")
+					screen.Invalidate() // the terminal is blank again: full repaint
 				}
 			}
 		}
@@ -210,9 +221,13 @@ func runLive(seed int64, fps float64, wIn, hIn int, ctxUsed, tod float64, ascii 
 			}
 		}
 
-		// Home the cursor and overwrite rather than clearing: clearing every
-		// frame is what makes a terminal animation flicker.
-		fmt.Print("\x1b[H" + f.frame(now))
+		// Overwrite rather than clear: clearing every frame is what makes a
+		// terminal animation flicker. Then write only the cells that changed
+		// -- see canvas.Screen. An unchanged frame writes nothing at all, and
+		// the cursor moves are the Screen's business, not the loop's.
+		if b := screen.Emit(f.composeFrame(now), f.profile); len(b) > 0 {
+			os.Stdout.Write(b)
+		}
 	}
 }
 
@@ -440,7 +455,18 @@ func drawScene(c *canvas.Canvas, sh *scape.Shore, cat *companion.Cat, lay layout
 	// keeps to the far side of the reserved strip so the companion never walks
 	// through it. See pace.go.
 	dx, moving := pace(st, c.W)
-	catX := lay.CatX + int(math.Round(paceOffsetOf(dx, lay)))
+	// The companion's own life supplies the POSE and a cell or two of wander
+	// inside the strip this layout already reserves; the pace still supplies how
+	// far it has stepped with the agent's work. Two channels, never crossed.
+	pose := st.Pose
+	if lifeLive() {
+		p, walking := lifePose(lifeBrain.Intent().Pose)
+		pose = p
+		moving = moving || walking
+		stage, _ := lifeBrain.Stage()
+		cat.SetScale(companion.ScaleForStage(int(stage)))
+	}
+	catX := lay.CatX + int(math.Round(paceOffsetOf(dx, lay))) + lifeOffset(lay.Mirror, lay.PaceSpan)
 	cat.SetStepping(moving)
 
 	// WHERE THE COMPANION ACTUALLY IS, which stopped being the same thing as
@@ -459,7 +485,7 @@ func drawScene(c *canvas.Canvas, sh *scape.Shore, cat *companion.Cat, lay layout
 	// The width is passed rather than stored: the near ladder refuses a rung
 	// the frame cannot pay for, so the drawn box DEPENDS on the frame, and an
 	// argument cannot be forgotten the way a setter can.
-	boxDX, boxW, _ := cat.DrawnBox(c.W)
+	boxDX, boxW, boxH := cat.DrawnBox(c.W)
 	// ⚠ DO NOT SHIFT catX HERE. Tried 2026-09-14, to pull the near pose out to
 	// its own edge: it broke three of his locked guarantees at once, because
 	// the sand, the litter and the tests all locate the companion through
@@ -534,7 +560,14 @@ func drawScene(c *canvas.Canvas, sh *scape.Shore, cat *companion.Cat, lay layout
 			sandFrom = nearRight + 1
 		}
 	}
-	cat.Draw(c.Near(), catX, top, t, st.Pose)
+	cat.Draw(c.Near(), catX, top, t, pose)
+	// Record where the animal landed, so a click can land on it too. The box is
+	// the near pose's own, the same one the litter and the sand keep clear of.
+	setLifeHit(nearLeft, top, boxW, boxH)
+	drawLifeSpeech(c, st, cat, catX, top, t)
+	if lifeLive() {
+		drawLifeFinds(c, cat, catX, top, lay.PaceSpan)
+	}
 	if st.Kittens > 0 {
 		// Swimmers stay above the shore's mean waterline with a row to spare
 		// for the swell's crests; the waterline moves with activity, so this
